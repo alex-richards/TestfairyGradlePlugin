@@ -1,5 +1,7 @@
 package com.github.alexrichards.gradle.testfairy
 
+import com.android.build.gradle.AppExtension
+import com.google.gson.Gson
 import org.apache.http.HttpResponse
 import org.apache.http.client.methods.HttpPost
 import org.apache.http.entity.mime.MultipartEntityBuilder
@@ -19,21 +21,21 @@ class TestFairyPlugin implements Plugin<Project> {
                 throw new IllegalArgumentException('only useful for android projects')
             }
 
-            final TestFairyConfigurationExtension testFairy = project.extensions.create TEST_FAIRY, TestFairyConfigurationExtension
-
-            if (!project.android.buildTypes.hasProperty(TEST_FAIRY)) {
-                final def testFairyBuildType = project.android.buildTypes.create TEST_FAIRY
-
-                if (project.android.buildTypes.hasProperty('debug')) {
-                    testFairyBuildType.initWith project.android.buildTypes.debug
+            project.android {
+                buildTypes {
+                    testfairy.initWith buildTypes.debug
+                    testfairy {
+                        packageNameSuffix '.' + TEST_FAIRY
+                        versionNameSuffix '-' + TEST_FAIRY
+                    }
                 }
-
-                testFairyBuildType.packageNameSuffix ".${TEST_FAIRY}"
-                testFairyBuildType.versionNameSuffix "-${TEST_FAIRY}"
             }
 
+            final AppExtension android = project.android
+            final TestFairyConfigurationExtension testFairy = project.extensions.create TEST_FAIRY, TestFairyConfigurationExtension
+
             project.afterEvaluate {
-                if (project.android.productFlavors.isEmpty()) {
+                if (android.productFlavors.isEmpty()) {
                     final Task packageTask = project.tasks["package${TEST_FAIRY.capitalize()}"]
                     project.task(TEST_FAIRY) {
                         group 'TestFairy'
@@ -50,17 +52,59 @@ class TestFairyPlugin implements Plugin<Project> {
                         description 'Uploads all TestFairy APKs to TestFairy'
                     }
 
-                    project.android.productFlavors.each() { final flavour ->
-                        final String flavourName = flavour.name.capitalize()
-                        final Task packageTask = project.tasks["package${flavourName}${TEST_FAIRY.capitalize()}"]
-                        project.task("testfairy${flavourName}") {
-                            group 'TestFairy'
-                            description "Uploads the ${flavourName} TestFairy APK to TestFairy"
-                            dependsOn packageTask
-                            parentTask.dependsOn task
-                        } << {
-                            packageTask.outputs.files.each { final File apk ->
-                                uploadTo testFairy, apk
+                    if (!android.hasProperty('flavorDimensionList')
+                            || android.flavorDimensionList == null
+                            || android.flavorDimensionList.isEmpty()) {
+                        android.productFlavors.each() { final flavour ->
+                            final String flavorName = flavour.name.capitalize()
+                            final Task packageTask = project.tasks["package${flavorName}${TEST_FAIRY.capitalize()}"]
+                            project.task("testfairy${flavorName}") { final Task task ->
+                                group 'TestFairy'
+                                description "Uploads the ${flavorName} TestFairy APK to TestFairy"
+                                dependsOn packageTask
+                                parentTask.dependsOn task
+                            } << {
+                                packageTask.outputs.files.each { final File apk ->
+                                    uploadTo testFairy, apk
+                                }
+                            }
+                        }
+                    } else {
+                        final List<List<String>> dimensions = [];
+
+                        android.flavorDimensionList.each { final String dimensionName ->
+                            List<String> dimension = []
+                            android.productFlavors.each { final flavor ->
+                                if (flavor.flavorDimension == dimensionName) {
+                                    dimension << flavor.name
+                                }
+                            }
+                            dimensions << dimension
+                        }
+
+                        List<String> names = dimensions.remove(0)
+                        while (dimensions.size() > 0) {
+                            List<String> newNames = []
+                            dimensions.remove(0).each { final String flavorNameTwo ->
+                                names.each { final String flavorNameOne ->
+                                    newNames << flavorNameOne + flavorNameTwo.capitalize()
+                                }
+                            }
+                            names = newNames
+                        }
+
+                        names.each { final String name ->
+                            final String flavorName = name.capitalize()
+                            final Task packageTask = project.tasks["package${flavorName}${TEST_FAIRY.capitalize()}"]
+                            project.task("testfairy${flavorName}") { final Task task ->
+                                group 'TestFairy'
+                                description "Uploads the ${flavorName} TestFairy APK to TestFairy"
+                                dependsOn packageTask
+                                parentTask.dependsOn task
+                            } << {
+                                packageTask.outputs.files.each { final File apk ->
+                                    uploadTo testFairy, apk
+                                }
                             }
                         }
                     }
@@ -112,7 +156,15 @@ class TestFairyPlugin implements Plugin<Project> {
 
         final HttpResponse response = new DefaultHttpClient().execute(post)
 
-        // TODO error checking
-        println response
+        if (response.statusLine.statusCode != 200) {
+            throw new RuntimeException('unable to upload: ' + response)
+        } else {
+            final TestFairyStatus status = new Gson().fromJson(new InputStreamReader(response.entity.content), TestFairyStatus.class)
+            if ('ok'.equals(status.getStatus())) {
+                // TODO done!!
+            } else {
+                throw new RuntimeException(status.getMessage())
+            }
+        }
     }
 }
