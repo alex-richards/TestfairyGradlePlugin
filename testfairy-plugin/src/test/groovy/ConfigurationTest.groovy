@@ -1,3 +1,4 @@
+import com.android.build.gradle.AppPlugin
 import com.github.alexrichards.gradle.testfairy.TestFairyConfigurationExtension
 import org.gradle.api.Project
 import org.gradle.testfixtures.ProjectBuilder
@@ -10,14 +11,14 @@ class ConfigurationTest {
     void testDelegate() {
         Project project = ProjectBuilder.builder().build()
 
-        project.apply plugin: com.android.build.gradle.AppPlugin
+        project.apply plugin: AppPlugin
         project.apply plugin: 'testfairy'
 
         Assert.assertTrue project.testfairy instanceof TestFairyConfigurationExtension
 
-        Assert.assertTrue project.android.buildTypes.hasProperty('release')
-        Assert.assertTrue project.android.buildTypes.hasProperty('debug')
-        Assert.assertTrue project.android.buildTypes.hasProperty('testfairy')
+        Assert.assertTrue project.android.buildTypes.hasProperty('release') as boolean
+        Assert.assertTrue project.android.buildTypes.hasProperty('debug') as boolean
+        Assert.assertTrue project.android.buildTypes.hasProperty('testfairy') as boolean
 
         project.testfairy {
             hostName 'test host'
@@ -56,7 +57,7 @@ class ConfigurationTest {
         Assert.assertEquals project.testfairy.maxDuration, '1d'
         Assert.assertEquals project.testfairy.video, 'wifi'
         Assert.assertEquals project.testfairy.videoQuality, 'high'
-        Assert.assertEquals project.testfairy.videoRate, 1.5, 0.01
+        Assert.assertEquals project.testfairy.videoRate as double, 1.5, 0.0001
         Assert.assertEquals project.testfairy.iconWatermark, 'on'
         Assert.assertEquals project.testfairy.comment, 'test comment'
     }

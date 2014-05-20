@@ -23,33 +23,43 @@ class TestFairyPlugin implements Plugin<Project> {
 
             if (!project.android.buildTypes.hasProperty(TEST_FAIRY)) {
                 final def testFairyBuildType = project.android.buildTypes.create TEST_FAIRY
-                testFairyBuildType.initWith project.android.buildTypes.debug
+
+                if (project.android.buildTypes.hasProperty('debug')) {
+                    testFairyBuildType.initWith project.android.buildTypes.debug
+                }
+
                 testFairyBuildType.packageNameSuffix ".${TEST_FAIRY}"
                 testFairyBuildType.versionNameSuffix "-${TEST_FAIRY}"
             }
 
             project.afterEvaluate {
-                //TODO validate params
-
                 if (project.android.productFlavors.isEmpty()) {
                     final Task packageTask = project.tasks["package${TEST_FAIRY.capitalize()}"]
-                    project.task(TEST_FAIRY) { Task task ->
-                        task.dependsOn packageTask
+                    project.task(TEST_FAIRY) {
+                        group 'TestFairy'
+                        description 'Uploads the TestFairy APK to TestFairy'
+                        dependsOn packageTask
                     } << {
-                        packageTask.outputs.files.each {
-                            uploadTo testFairy, it
+                        packageTask.outputs.files.each { final File apk ->
+                            uploadTo testFairy, apk
                         }
                     }
                 } else {
-                    final Task parentTask = project.task(TEST_FAIRY)
-                    project.android.productFlavors.each() { flavour ->
+                    final Task parentTask = project.task(TEST_FAIRY) {
+                        group 'TestFairy'
+                        description 'Uploads all TestFairy APKs to TestFairy'
+                    }
+
+                    project.android.productFlavors.each() { final flavour ->
                         final String flavourName = flavour.name.capitalize()
                         final Task packageTask = project.tasks["package${flavourName}${TEST_FAIRY.capitalize()}"]
-                        project.task("testfairy${flavourName}") { Task task ->
-                            task.dependsOn packageTask
+                        project.task("testfairy${flavourName}") {
+                            group 'TestFairy'
+                            description "Uploads the ${flavourName} TestFairy APK to TestFairy"
+                            dependsOn packageTask
                             parentTask.dependsOn task
                         } << {
-                            packageTask.outputs.files.each { apk ->
+                            packageTask.outputs.files.each { final File apk ->
                                 uploadTo testFairy, apk
                             }
                         }
